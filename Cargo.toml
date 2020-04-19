@@ -1,0 +1,12 @@
+[package]
+name = "adafruit_motorhat"
+version = "0.1.0"
+authors = ["ostrosco <ostrosco@fastmail.fm>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+pwm-pca9685 = "0.2"
+linux-embedded-hal = "0.3"
+rppal = { version = "0.11", features = ["hal"] }
