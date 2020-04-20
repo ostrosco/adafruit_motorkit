@@ -2,81 +2,86 @@ use hal::I2cdev;
 use lazy_static::lazy_static;
 use linux_embedded_hal as hal;
 use pwm_pca9685::{Channel, Pca9685, SlaveAddr};
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 
 lazy_static! {
     // A map of which motor uses which channels on the Motor HAT.
-    static ref CHANNEL_MAP: HashMap<Motor, MotorChannels> = {
+    static ref DC_CHANNEL_MAP: HashMap<DcMotor, DcChannels> = {
         let mut map = HashMap::new();
         map.insert(
-            Motor::Motor1,
-            MotorChannels::Dc(DcChannels {
+            DcMotor::Motor1,
+            DcChannels {
                 ref_channel: Channel::C8,
                 forward_channel: Channel::C9,
                 backward_channel: Channel::C10,
-            }),
+            },
         );
         map.insert(
-            Motor::Motor2,
-            MotorChannels::Dc(DcChannels {
+            DcMotor::Motor2,
+            DcChannels {
                 ref_channel: Channel::C13,
                 forward_channel: Channel::C11,
                 backward_channel: Channel::C12,
-            }),
+            },
         );
         map.insert(
-            Motor::Motor3,
-            MotorChannels::Dc(DcChannels {
+            DcMotor::Motor3,
+            DcChannels {
                 ref_channel: Channel::C2,
                 forward_channel: Channel::C3,
                 backward_channel: Channel::C4,
-            }),
+            },
         );
         map.insert(
-            Motor::Motor4,
-            MotorChannels::Dc(DcChannels {
+            DcMotor::Motor4,
+            DcChannels {
                 ref_channel: Channel::C7,
                 forward_channel: Channel::C5,
                 backward_channel: Channel::C6,
-            }),
+            },
         );
+        map
+    };
+
+    static ref STEP_CHANNEL_MAP: HashMap<StepMotor, StepChannels> = {
+        let mut map = HashMap::new();
         map.insert(
-            Motor::Stepper1,
-            MotorChannels::Stepper(StepperChannels {
+            StepMotor::Stepper1,
+            StepChannels {
                 ain1: Channel::C10,
                 ain2: Channel::C9,
                 bin1: Channel::C11,
                 bin2: Channel::C12,
-            }),
+            },
         );
         map.insert(
-            Motor::Stepper2,
-            MotorChannels::Stepper(StepperChannels {
+            StepMotor::Stepper2,
+            StepChannels {
                 ain1: Channel::C4,
                 ain2: Channel::C3,
                 bin1: Channel::C5,
                 bin2: Channel::C6,
-            }),
+            },
         );
         map
     };
 }
 
 #[derive(Hash, PartialEq, Eq)]
-pub enum Motor {
+pub enum DcMotor {
     Motor1,
     Motor2,
     Motor3,
     Motor4,
-    Stepper1,
-    Stepper2,
 }
 
-enum MotorChannels {
-    Dc(DcChannels),
-    Stepper(StepperChannels),
+#[derive(Hash, PartialEq, Eq)]
+pub enum StepMotor {
+    Stepper1,
+    Stepper2,
 }
 
 struct DcChannels {
@@ -85,11 +90,22 @@ struct DcChannels {
     backward_channel: Channel,
 }
 
-struct StepperChannels {
+struct StepChannels {
     ain1: Channel,
     ain2: Channel,
     bin1: Channel,
     bin2: Channel,
+}
+
+pub enum StepDirection {
+    Forward,
+    Backward,
+}
+
+pub enum StepStyle {
+    Single,
+    Double,
+    Interleave,
 }
 
 pub struct MotorControl {
@@ -143,29 +159,17 @@ impl MotorControl {
         Ok(MotorControl { pwm })
     }
 
-    /// Sets the throttle for a particular motor. Valid throttle values range
-    /// from -1.0 to 1.0.
-    pub fn set_motor(
+    /// Sets the throttle for one of the four DC motors.
+    pub fn set_dc_motor(
         &mut self,
-        motor: Motor,
+        motor: DcMotor,
         throttle: f32,
     ) -> Result<(), MotorError> {
         if throttle > 1.0 || throttle < -1.0 {
             return Err(MotorError::ThrottleError);
         }
-        let channels = CHANNEL_MAP.get(&motor).unwrap();
-        match channels {
-            MotorChannels::Dc(chan) => self.set_dc_motor(chan, throttle),
-            MotorChannels::Stepper(chan) => self.set_step_motor(chan, throttle),
-        }
-    }
+        let channels = DC_CHANNEL_MAP.get(&motor).unwrap();
 
-    /// Sets the throttle for one of the four DC motors.
-    fn set_dc_motor(
-        &mut self,
-        channels: &DcChannels,
-        throttle: f32,
-    ) -> Result<(), MotorError> {
         // Set the reference channel to run at full blast.
         self.pwm
             .set_channel_off(channels.ref_channel, 4095)
@@ -173,30 +177,35 @@ impl MotorControl {
 
         let duty_cycle = (4095.0 * throttle.abs()) as u16;
 
-        if throttle > 0.0 {
-            self.pwm
-                .set_channel_off(channels.forward_channel, duty_cycle)
-                .map_err(|_| MotorError::ChannelError)?;
-        } else if throttle < 0.0 {
-            self.pwm
-                .set_channel_off(channels.backward_channel, duty_cycle)
-                .map_err(|_| MotorError::ChannelError)?;
-        } else {
-            self.pwm
-                .set_channel_full_off(channels.forward_channel)
-                .map_err(|_| MotorError::ChannelError)?;
-            self.pwm
-                .set_channel_full_off(channels.backward_channel)
-                .map_err(|_| MotorError::ChannelError)?;
+        match throttle.partial_cmp(&0.0) {
+            Some(Ordering::Greater) => {
+                self.pwm
+                    .set_channel_off(channels.forward_channel, duty_cycle)
+                    .map_err(|_| MotorError::ChannelError)?;
+            }
+            Some(Ordering::Less) => {
+                self.pwm
+                    .set_channel_off(channels.backward_channel, duty_cycle)
+                    .map_err(|_| MotorError::ChannelError)?;
+            }
+            _ => {
+                self.pwm
+                    .set_channel_full_off(channels.forward_channel)
+                    .map_err(|_| MotorError::ChannelError)?;
+                self.pwm
+                    .set_channel_full_off(channels.backward_channel)
+                    .map_err(|_| MotorError::ChannelError)?;
+            }
         }
         Ok(())
     }
 
-    /// Sets the throttle for one of the two stepper motors.
-    fn set_step_motor(
+    /// Steps one of the two stepper motors once.
+    pub fn step_once(
         &mut self,
-        _channels: &StepperChannels,
-        _throttle: f32,
+        motor: &StepMotor,
+        step_dir: StepDirection,
+        step_style: StepStyle,
     ) -> Result<(), MotorError> {
         // This will be unimplemented until I have a stepper motor that I can
         // actually test against.
