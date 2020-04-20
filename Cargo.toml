@@ -1,5 +1,5 @@
 [package]
-name = "adafruit_motorhat"
+name = "adafruit_motorkit"
 version = "0.1.0"
 authors = ["ostrosco <ostrosco@fastmail.fm>"]
 edition = "2018"
