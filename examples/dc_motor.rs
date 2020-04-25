@@ -1,4 +1,4 @@
-use adafruit_motorhat::{DcMotor, MotorControl};
+use adafruit_motorkit::{dc::DcMotor, MotorControl};
 use std::error::Error;
 use std::thread;
 use std::time::Duration;

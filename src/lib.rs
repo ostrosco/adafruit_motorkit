@@ -1,116 +1,14 @@
 use hal::I2cdev;
-use lazy_static::lazy_static;
 use linux_embedded_hal as hal;
 use pwm_pca9685::{Channel, Pca9685, SlaveAddr};
 use std::cmp::Ordering;
-use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 
-lazy_static! {
-    // A map of which motor uses which channels on the Motor HAT.
-    static ref DC_CHANNEL_MAP: HashMap<DcMotor, DcChannels> = {
-        let mut map = HashMap::new();
-        map.insert(
-            DcMotor::Motor1,
-            DcChannels {
-                ref_channel: Channel::C8,
-                forward_channel: Channel::C9,
-                backward_channel: Channel::C10,
-            },
-        );
-        map.insert(
-            DcMotor::Motor2,
-            DcChannels {
-                ref_channel: Channel::C13,
-                forward_channel: Channel::C11,
-                backward_channel: Channel::C12,
-            },
-        );
-        map.insert(
-            DcMotor::Motor3,
-            DcChannels {
-                ref_channel: Channel::C2,
-                forward_channel: Channel::C3,
-                backward_channel: Channel::C4,
-            },
-        );
-        map.insert(
-            DcMotor::Motor4,
-            DcChannels {
-                ref_channel: Channel::C7,
-                forward_channel: Channel::C5,
-                backward_channel: Channel::C6,
-            },
-        );
-        map
-    };
+pub mod dc;
+use dc::{DcMotor, DC_CHANNEL_MAP};
 
-    static ref STEP_CHANNEL_MAP: HashMap<StepMotor, StepChannels> = {
-        let mut map = HashMap::new();
-        map.insert(
-            StepMotor::Stepper1,
-            StepChannels {
-                ain1: Channel::C10,
-                ain2: Channel::C9,
-                bin1: Channel::C11,
-                bin2: Channel::C12,
-            },
-        );
-        map.insert(
-            StepMotor::Stepper2,
-            StepChannels {
-                ain1: Channel::C4,
-                ain2: Channel::C3,
-                bin1: Channel::C5,
-                bin2: Channel::C6,
-            },
-        );
-        map
-    };
-}
-
-#[derive(Hash, PartialEq, Eq)]
-pub enum DcMotor {
-    Motor1,
-    Motor2,
-    Motor3,
-    Motor4,
-}
-
-#[derive(Hash, PartialEq, Eq)]
-pub enum StepMotor {
-    Stepper1,
-    Stepper2,
-}
-
-struct DcChannels {
-    ref_channel: Channel,
-    forward_channel: Channel,
-    backward_channel: Channel,
-}
-
-struct StepChannels {
-    ain1: Channel,
-    ain2: Channel,
-    bin1: Channel,
-    bin2: Channel,
-}
-
-pub enum StepDirection {
-    Forward,
-    Backward,
-}
-
-pub enum StepStyle {
-    Single,
-    Double,
-    Interleave,
-}
-
-pub struct MotorControl {
-    pwm: Pca9685<I2cdev>,
-}
+pub mod stepper;
 
 #[derive(Debug)]
 pub enum MotorError {
@@ -128,6 +26,10 @@ impl fmt::Display for MotorError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)
     }
+}
+
+pub struct MotorControl {
+    pub pwm: Pca9685<I2cdev>,
 }
 
 impl Error for MotorError {}
@@ -198,17 +100,5 @@ impl MotorControl {
             }
         }
         Ok(())
-    }
-
-    /// Steps one of the two stepper motors once.
-    pub fn step_once(
-        &mut self,
-        motor: &StepMotor,
-        step_dir: StepDirection,
-        step_style: StepStyle,
-    ) -> Result<(), MotorError> {
-        // This will be unimplemented until I have a stepper motor that I can
-        // actually test against.
-        unimplemented!();
     }
 }
