@@ -1,21 +1,20 @@
 use adafruit_motorkit::{
-    stepper::{StepDirection, StepMotor, StepStyle, Stepper},
-    MotorControl,
+    init_pwm,
+    stepper::{StepDirection, StepStyle, StepperMotor},
+    Motor,
 };
 use std::error::Error;
-use std::thread;
-use std::time::Duration;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let mut motor_ctrl = MotorControl::try_new(None)?;
-    let mut stepper =
-        Stepper::try_new(&mut motor_ctrl.pwm, StepMotor::Stepper1, None)?;
+    let mut pwm = init_pwm(None)?;
+    let mut stepper = StepperMotor::try_new(&mut pwm, Motor::Stepper1, None)?;
     for _ in 1..100 {
         stepper.step_once(
-            &mut motor_ctrl.pwm,
+            &mut pwm,
             StepDirection::Forward,
             StepStyle::Single,
         )?;
     }
+    stepper.stop(&mut pwm)?;
     Ok(())
 }

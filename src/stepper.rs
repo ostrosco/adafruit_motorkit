@@ -1,4 +1,4 @@
-use crate::MotorError;
+use crate::{Motor, MotorError};
 use hal::I2cdev;
 use lazy_static::lazy_static;
 use linux_embedded_hal as hal;
@@ -7,10 +7,10 @@ use std::collections::HashMap;
 use std::f32::consts::PI;
 
 lazy_static! {
-    pub static ref STEP_CHANNEL_MAP: HashMap<StepMotor, StepChannels> = {
+    pub static ref STEP_CHANNEL_MAP: HashMap<Motor, StepChannels> = {
         let mut map = HashMap::new();
         map.insert(
-            StepMotor::Stepper1,
+            Motor::Stepper1,
             StepChannels {
                 ref_channel1: Channel::C8,
                 ref_channel2: Channel::C13,
@@ -21,7 +21,7 @@ lazy_static! {
             },
         );
         map.insert(
-            StepMotor::Stepper2,
+            Motor::Stepper2,
             StepChannels {
                 ref_channel1: Channel::C2,
                 ref_channel2: Channel::C7,
@@ -36,13 +36,14 @@ lazy_static! {
 }
 
 #[derive(Clone)]
+/// A structure encapsulating the channels used to control a stepper motor.
 pub struct StepChannels {
-    pub ref_channel1: Channel,
-    pub ref_channel2: Channel,
-    pub ain1: Channel,
-    pub ain2: Channel,
-    pub bin1: Channel,
-    pub bin2: Channel,
+    ref_channel1: Channel,
+    ref_channel2: Channel,
+    ain1: Channel,
+    ain2: Channel,
+    bin1: Channel,
+    bin2: Channel,
 }
 #[derive(PartialEq, Debug)]
 pub enum StepDirection {
@@ -58,40 +59,50 @@ pub enum StepStyle {
     Microstep,
 }
 
-#[derive(Hash, PartialEq, Eq)]
-pub enum StepMotor {
-    Stepper1,
-    Stepper2,
-}
-
-pub struct Stepper {
+/// A structure to initialize and control a stepper motor.
+pub struct StepperMotor {
     microsteps: i32,
     pub channels: StepChannels,
     curve: Vec<i32>,
     current_step: i32,
 }
 
-impl Stepper {
+impl StepperMotor {
     /// Initializes the stepper motor. If `microsteps` is not specified, it
     /// defaults to 16.
     pub fn try_new(
         pwm: &mut Pca9685<I2cdev>,
-        step_motor: StepMotor,
+        step_motor: Motor,
         microsteps: Option<i32>,
     ) -> Result<Self, MotorError> {
         let channels = STEP_CHANNEL_MAP.get(&step_motor).unwrap();
         let microsteps = microsteps.unwrap_or(16);
         let curve: Vec<i32> = (0..microsteps + 1)
             .map(|i| {
-                let value = (65535.0
+                let value = ((65535.0
                     * (PI / (2.0 * microsteps as f32) * i as f32).sin())
                 .round() as i32
-                    + 1
+                    + 1)
                     >> 4;
                 value.min(4095)
             })
             .collect();
 
+        // Set the channels that we'll be using on.
+        pwm.set_channel_on(channels.ref_channel1, 0)
+            .map_err(|_| MotorError::ChannelError)?;
+        pwm.set_channel_on(channels.ref_channel1, 0)
+            .map_err(|_| MotorError::ChannelError)?;
+        pwm.set_channel_on(channels.ain1, 0)
+            .map_err(|_| MotorError::ChannelError)?;
+        pwm.set_channel_on(channels.ain2, 0)
+            .map_err(|_| MotorError::ChannelError)?;
+        pwm.set_channel_on(channels.bin1, 0)
+            .map_err(|_| MotorError::ChannelError)?;
+        pwm.set_channel_on(channels.bin2, 0)
+            .map_err(|_| MotorError::ChannelError)?;
+
+        // Set the reference channels to full blast.
         pwm.set_channel_off(channels.ref_channel1, 4095)
             .map_err(|_| MotorError::ChannelError)?;
         pwm.set_channel_off(channels.ref_channel2, 4095)
@@ -107,23 +118,8 @@ impl Stepper {
         Ok(stepper)
     }
 
-    pub fn calc_step(
-        &mut self,
-        step_dir: StepDirection,
-        step_style: StepStyle,
-    ) -> Result<[i32; 4], MotorError> {
-        let step_size = self.calc_step_size(&step_dir, &step_style);
-        println!("step size: {}", step_size);
-        match step_dir {
-            StepDirection::Forward => self.current_step += step_size,
-            StepDirection::Backward => self.current_step -= step_size,
-        }
-        println!("Current microstep: {}", self.current_step);
-        let duty_cycles = self.calc_duty_cycle(step_style);
-        Ok(duty_cycles)
-    }
-
-    /// Steps one of the two stepper motors once.
+    /// Commands the stepper motor to step one time in a given direction and
+    /// with a given style.
     pub fn step_once(
         &mut self,
         pwm: &mut Pca9685<I2cdev>,
@@ -132,9 +128,42 @@ impl Stepper {
     ) -> Result<(), MotorError> {
         // Set the reference channels to run at full blast.
         let duty_cycle = self.calc_step(step_dir, step_style)?;
-        println!("duty_cycle: {:?}", duty_cycle);
         self.update_coils(pwm, duty_cycle)?;
         Ok(())
+    }
+
+    /// Stops energizing the PWMs for this motor.
+    pub fn stop(
+        &mut self,
+        pwm: &mut Pca9685<I2cdev>,
+    ) -> Result<(), MotorError> {
+        pwm.set_channel_full_off(self.channels.ref_channel1)
+            .map_err(|_| MotorError::ChannelError)?;
+        pwm.set_channel_full_off(self.channels.ref_channel1)
+            .map_err(|_| MotorError::ChannelError)?;
+        pwm.set_channel_full_off(self.channels.ain1)
+            .map_err(|_| MotorError::ChannelError)?;
+        pwm.set_channel_full_off(self.channels.ain2)
+            .map_err(|_| MotorError::ChannelError)?;
+        pwm.set_channel_full_off(self.channels.bin1)
+            .map_err(|_| MotorError::ChannelError)?;
+        pwm.set_channel_full_off(self.channels.bin2)
+            .map_err(|_| MotorError::ChannelError)?;
+        Ok(())
+    }
+
+    fn calc_step(
+        &mut self,
+        step_dir: StepDirection,
+        step_style: StepStyle,
+    ) -> Result<[i32; 4], MotorError> {
+        let step_size = self.calc_step_size(&step_dir, &step_style);
+        match step_dir {
+            StepDirection::Forward => self.current_step += step_size,
+            StepDirection::Backward => self.current_step -= step_size,
+        }
+        let duty_cycles = self.calc_duty_cycle(step_style);
+        Ok(duty_cycles)
     }
 
     fn update_coils(
@@ -190,18 +219,18 @@ impl Stepper {
             } else {
                 self.current_step -= additional_microsteps;
             }
-            return 0;
+            0
         } else if step_style == &StepStyle::Interleave {
-            return half_step;
+            half_step
         } else {
             let curr_interleave = self.current_step / half_step;
             if (step_style == &StepStyle::Single && curr_interleave % 2 == 1)
                 || (step_style == &StepStyle::Double
                     && curr_interleave % 2 == 0)
             {
-                return half_step;
+                half_step
             } else {
-                return self.microsteps;
+                self.microsteps
             }
         }
     }
