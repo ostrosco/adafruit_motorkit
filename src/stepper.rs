@@ -110,7 +110,7 @@ impl StepperMotor {
 
         let mut stepper = Self {
             microsteps,
-            current_step: 0,
+            current_step: i32::MAX/2,
             channels: (*channels).clone(),
             curve,
         };
