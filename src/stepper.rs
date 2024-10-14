@@ -1,38 +1,33 @@
 use crate::{Motor, MotorError};
 use hal::I2cdev;
-use lazy_static::lazy_static;
 use linux_embedded_hal as hal;
 use pwm_pca9685::{Channel, Pca9685};
-use std::collections::HashMap;
 use std::f32::consts::PI;
 
-lazy_static! {
-    pub static ref STEP_CHANNEL_MAP: HashMap<Motor, StepChannels> = {
-        let mut map = HashMap::new();
-        map.insert(
-            Motor::Stepper1,
-            StepChannels {
-                ref_channel1: Channel::C8,
-                ref_channel2: Channel::C13,
-                ain1: Channel::C10,
-                ain2: Channel::C9,
-                bin1: Channel::C11,
-                bin2: Channel::C12,
-            },
-        );
-        map.insert(
-            Motor::Stepper2,
-            StepChannels {
-                ref_channel1: Channel::C2,
-                ref_channel2: Channel::C7,
-                ain1: Channel::C4,
-                ain2: Channel::C3,
-                bin1: Channel::C5,
-                bin2: Channel::C6,
-            },
-        );
-        map
+/// Return Stepper channel map for the given motor type.
+/// Returns None if given motor is no stepper motor.
+pub fn get_stepchannels_map(motor: Motor) -> Option<StepChannels> {
+    let channels = match motor {
+        Motor::Stepper1 => StepChannels {
+            ref_channel1: Channel::C8,
+            ref_channel2: Channel::C13,
+            ain1: Channel::C10,
+            ain2: Channel::C9,
+            bin1: Channel::C11,
+            bin2: Channel::C12,
+        },
+        Motor::Stepper2 => StepChannels {
+            ref_channel1: Channel::C2,
+            ref_channel2: Channel::C7,
+            ain1: Channel::C4,
+            ain2: Channel::C3,
+            bin1: Channel::C5,
+            bin2: Channel::C6,
+        },
+        _ => return None,
     };
+
+    Some(channels)
 }
 
 #[derive(Clone)]
@@ -75,7 +70,9 @@ impl StepperMotor {
         step_motor: Motor,
         microsteps: Option<i32>,
     ) -> Result<Self, MotorError> {
-        let channels = STEP_CHANNEL_MAP.get(&step_motor).unwrap();
+        let channels = get_stepchannels_map(step_motor)
+            .ok_or(MotorError::InvalidMotorError)?;
+
         let microsteps = microsteps.unwrap_or(16);
         let curve: Vec<i32> = (0..microsteps + 1)
             .map(|i| {
@@ -111,7 +108,7 @@ impl StepperMotor {
         let mut stepper = Self {
             microsteps,
             current_step: i32::MAX / 2,
-            channels: (*channels).clone(),
+            channels,
             curve,
         };
         stepper.update_coils(pwm, [0; 4])?;
