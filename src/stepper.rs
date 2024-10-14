@@ -40,13 +40,15 @@ pub struct StepChannels {
     bin1: Channel,
     bin2: Channel,
 }
-#[derive(PartialEq, Debug)]
+#[derive(Debug, PartialEq)]
+#[derive(Copy, Clone)]
 pub enum StepDirection {
     Forward,
     Backward,
 }
 
 #[derive(Debug, PartialEq)]
+#[derive(Copy, Clone)]
 pub enum StepStyle {
     Single,
     Double,
