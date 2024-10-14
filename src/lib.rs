@@ -1,6 +1,6 @@
 use hal::I2cdev;
 use linux_embedded_hal as hal;
-use pwm_pca9685::{Pca9685, SlaveAddr};
+use pwm_pca9685::{Address, Pca9685};
 use std::error::Error;
 use std::fmt;
 
@@ -57,10 +57,10 @@ pub fn init_pwm(i2c: Option<I2cdev>) -> Result<Pca9685<I2cdev>, MotorError> {
     };
 
     // The default address for the motor hat is 0x96.
-    let address =
-        SlaveAddr::Alternative(true, false, false, false, false, false);
+    let address = Address::from((true, false, false, false, false, false));
 
-    let mut pwm = Pca9685::new(i2c, address);
+    let mut pwm =
+        Pca9685::new(i2c, address).map_err(|_| MotorError::PwmError)?;
     pwm.enable().map_err(|_| MotorError::PwmError)?;
     pwm.set_prescale(4).map_err(|_| MotorError::PwmError)?;
     Ok(pwm)
