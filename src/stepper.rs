@@ -40,15 +40,13 @@ pub struct StepChannels {
     bin1: Channel,
     bin2: Channel,
 }
-#[derive(Debug, PartialEq)]
-#[derive(Copy, Clone)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum StepDirection {
     Forward,
     Backward,
 }
 
-#[derive(Debug, PartialEq)]
-#[derive(Copy, Clone)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum StepStyle {
     Single,
     Double,
@@ -186,7 +184,7 @@ impl StepperMotor {
         let mut duty_cycles = [0; 4];
         let trailing_coil =
             ((self.current_step / self.microsteps) % 4) as usize;
-        let leading_coil = ((trailing_coil + 1) % 4) as usize;
+        let leading_coil = (trailing_coil + 1) % 4;
         let microstep = (self.current_step % self.microsteps) as usize;
         duty_cycles[leading_coil] = self.curve[microstep];
         duty_cycles[trailing_coil] =

@@ -77,7 +77,7 @@ impl DcMotor {
         pwm: &mut Pca9685<I2cdev>,
         throttle: f32,
     ) -> Result<(), MotorError> {
-        if throttle > 1.0 || throttle < -1.0 {
+        if !(-1.0..=1.0).contains(&throttle) {
             return Err(MotorError::ThrottleError);
         }
         let duty_cycle = (4095.0 * throttle.abs()) as u16;
