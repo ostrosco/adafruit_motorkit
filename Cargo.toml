@@ -1,6 +1,6 @@
 [package]
 name = "adafruit_motorkit"
-version = "0.1.1"
+version = "0.2.0"
 authors = ["ostrosco <ostrosco@fastmail.fm>"]
 edition = "2018"
 description = "A simple driver for the Adafruit DC and Stepper Motor HAT."
